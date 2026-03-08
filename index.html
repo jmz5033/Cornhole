@@ -62,11 +62,49 @@
     }
     .panel:active { filter: brightness(1.1); }
     .panel--left {
-      background: linear-gradient(170deg, #c89200ee, #c89200cc);
       border-right: 3px solid rgba(0,0,0,0.4);
     }
-    .panel--right {
-      background: linear-gradient(170deg, #1a4b8cee, #1a4b8ccc);
+
+    .color-dot {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.5);
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 5;
+    }
+    .color-dot:active { transform: scale(1.2); }
+
+    .color-picker-overlay {
+      position: absolute;
+      z-index: 10;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.78);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      max-width: 200px;
+    }
+
+    .swatch {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 3px solid transparent;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .swatch:active { transform: scale(1.15); }
+    .swatch--active {
+      border-color: #fff;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.35);
     }
 
     .panel__flash {
@@ -207,16 +245,28 @@
 <script>
   const WINNING_SCORE = 21;
 
+  const COLORS = [
+    { name: 'Blue',   color: '#1a4b8c', accent: '#3b7ddd' },
+    { name: 'Yellow', color: '#c89200', accent: '#f5bf00' },
+    { name: 'Red',    color: '#b52828', accent: '#e03131' },
+    { name: 'Green',  color: '#1a7a3f', accent: '#2f9e44' },
+    { name: 'Purple', color: '#5c2d8c', accent: '#9c5ce0' },
+    { name: 'Orange', color: '#b54a00', accent: '#e8680a' },
+    { name: 'Pink',   color: '#8c1a5c', accent: '#d63092' },
+    { name: 'Teal',   color: '#0a6b6b', accent: '#1aada0' },
+  ];
+
   const state = {
     teams: [
-      { name: 'Team 1', score: 0, color: '#c89200', accent: '#f5bf00' },
-      { name: 'Team 2', score: 0, color: '#1a4b8c', accent: '#3b7ddd' },
+      { name: 'Team 1', score: 0, color: '#1a4b8c', accent: '#3b7ddd' },
+      { name: 'Team 2', score: 0, color: '#c89200', accent: '#f5bf00' },
     ],
     history: [],
     winner: null,
     editingName: null,
     flashing: null,
     popTeam: null,
+    colorPicking: null,
   };
 
   function render() {
@@ -228,19 +278,31 @@
 
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 'left' : 'right';
-      html += `<div class="panel panel--${side}" onclick="addPoint(${i})">`;
+      html += `<div class="panel panel--${side}" style="background:linear-gradient(170deg,${t[i].color}ee,${t[i].color}cc)" onclick="addPoint(${i})">`;
 
       if (state.flashing === i) {
         html += `<div class="panel__flash"></div>`;
       }
 
       if (state.editingName === i) {
-        html += `<input class="team-name-input" id="name-input-${i}" value="${t[i].name}" 
-          onclick="event.stopPropagation()" 
-          onblur="saveName(${i})" 
+        html += `<input class="team-name-input" id="name-input-${i}" value="${t[i].name}"
+          onclick="event.stopPropagation()"
+          onblur="saveName(${i})"
           onkeydown="if(event.key==='Enter')saveName(${i})" autofocus>`;
       } else {
-        html += `<div class="team-name" onclick="event.stopPropagation(); editName(${i})">${t[i].name}</div>`;
+        html += `<div style="display:flex;align-items:center;gap:8px;position:relative;z-index:5">
+          <div class="team-name" onclick="event.stopPropagation(); editName(${i})">${t[i].name}</div>
+          <div class="color-dot" style="background:${t[i].accent}" onclick="event.stopPropagation(); openColorPicker(${i})"></div>
+        </div>`;
+      }
+
+      if (state.colorPicking === i) {
+        html += `<div class="color-picker-overlay" onclick="event.stopPropagation()">
+          ${COLORS.map((c, ci) => `<div class="swatch${t[i].color === c.color ? ' swatch--active' : ''}"
+            style="background:${c.accent}"
+            title="${c.name}"
+            onclick="event.stopPropagation(); setColor(${i}, ${ci})"></div>`).join('')}
+        </div>`;
       }
 
       const popClass = state.popTeam === i ? ' score--pop' : '';
@@ -302,6 +364,7 @@
 
   function addPoint(teamIndex) {
     if (state.winner !== null) return;
+    if (state.colorPicking !== null) { state.colorPicking = null; render(); return; }
     state.teams[teamIndex].score++;
     state.history.push({ teamIndex, prevScore: state.teams[teamIndex].score - 1 });
     state.flashing = teamIndex;
@@ -333,6 +396,19 @@
     state.teams[1].score = 0;
     state.history = [];
     state.winner = null;
+    state.colorPicking = null;
+    render();
+  }
+
+  function openColorPicker(teamIndex) {
+    state.colorPicking = state.colorPicking === teamIndex ? null : teamIndex;
+    render();
+  }
+
+  function setColor(teamIndex, colorIndex) {
+    state.teams[teamIndex].color = COLORS[colorIndex].color;
+    state.teams[teamIndex].accent = COLORS[colorIndex].accent;
+    state.colorPicking = null;
     render();
   }
 
