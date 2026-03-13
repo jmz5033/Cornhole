@@ -474,24 +474,64 @@
     render();
   }
 
-  // Keep screen awake — uses NoSleep.js (video trick for iOS)
-  function loadNoSleep() {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js';
-    s.onload = function() {
-      const noSleep = new NoSleep();
-      // Must be enabled on a user gesture (first tap)
-      function enableOnTap() {
-        noSleep.enable();
-        document.removeEventListener('click', enableOnTap);
-        document.removeEventListener('touchstart', enableOnTap);
+  // Keep screen awake on iOS — inline video trick
+  // Creates a tiny looping video that prevents auto-lock
+  function preventSleep() {
+    const video = document.createElement('video');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('muted', '');
+    video.setAttribute('loop', '');
+    video.muted = true;
+    video.style.position = 'fixed';
+    video.style.top = '-1px';
+    video.style.left = '-1px';
+    video.style.width = '1px';
+    video.style.height = '1px';
+    video.style.opacity = '0.01';
+    video.style.pointerEvents = 'none';
+    video.style.zIndex = '-1';
+
+    // Tiny base64-encoded silent mp4 (< 1KB)
+    const base64Mp4 = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAA' +
+      'PBtZGF0AAACrwYF//+r3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE1NyByMjk4MSBB' +
+      'QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB' +
+      'QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB' +
+      'QUFBQUFBQWCAAABIm1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAABkAAEAAAEAAAAA' +
+      'AAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAA' +
+      'AAAAAAAAAAAAAAAAAAAgAAABppdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAABk' +
+      'AAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAIAAAACAAAAAAAJGVkdHMAAAAcZWxz' +
+      'dAAAAAAAAAABAAAAZAAAAAAAAQAAAAAA';
+
+    // Use a blob URL
+    try {
+      const byteChars = atob(base64Mp4);
+      const byteNums = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([new Uint8Array(byteNums)], { type: 'video/mp4' });
+      video.src = URL.createObjectURL(blob);
+    } catch(e) {
+      // Fallback: use a data URI
+      video.src = 'data:video/mp4;base64,' + base64Mp4;
+    }
+
+    document.body.appendChild(video);
+
+    function startVideo() {
+      video.play().catch(() => {});
+    }
+
+    // Start on first interaction
+    document.addEventListener('click', startVideo, { once: true });
+    document.addEventListener('touchstart', startVideo, { once: true });
+
+    // Restart if paused (e.g. returning from background)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        video.play().catch(() => {});
       }
-      document.addEventListener('click', enableOnTap);
-      document.addEventListener('touchstart', enableOnTap);
-    };
-    document.head.appendChild(s);
+    });
   }
-  loadNoSleep();
+  preventSleep();
 
   render();
 </script>
