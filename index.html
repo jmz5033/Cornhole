@@ -10,6 +10,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>Cornhole Scorekeeper</title>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Lilita+One&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/nosleep.js/dist/NoSleep.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; overflow: hidden; }
@@ -430,7 +431,7 @@
 
   render();
 
-  // Wake Lock — keep screen on while the app is active
+  // Wake Lock API — primary method (Chrome/Android, Safari 16.4+)
   let wakeLock = null;
   async function requestWakeLock() {
     if (!('wakeLock' in navigator)) return;
@@ -442,6 +443,14 @@
     if (document.visibilityState === 'visible') requestWakeLock();
   });
   requestWakeLock();
+
+  // NoSleep.js — hidden video fallback for older iOS Safari
+  const noSleep = new NoSleep();
+  function enableNoSleep() {
+    noSleep.enable();
+  }
+  document.addEventListener('touchstart', enableNoSleep, { once: true });
+  document.addEventListener('click', enableNoSleep, { once: true });
 </script>
 </body>
 </html>
