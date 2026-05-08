@@ -68,15 +68,43 @@
   user-select: none;
   position: relative;
   overflow: hidden;
-  transition: filter 0.1s;
+  transition: filter 0.1s, opacity 0.2s;
 }
 .panel:active { filter: brightness(1.1); }
+.panel--inactive {
+  opacity: 0.5;
+  cursor: default;
+}
+.panel--active-turn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 4px solid rgba(255,255,255,0.45);
+  pointer-events: none;
+  z-index: 3;
+}
 
 .panel__flash {
   position: absolute; inset: 0;
   background: rgba(255,255,255,0.15);
   pointer-events: none;
   animation: flash 0.25s ease-out forwards;
+}
+
+.sudden-death-badge {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(220, 38, 38, 0.85);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+  z-index: 5;
 }
 
 .team-name {
@@ -117,6 +145,10 @@
 }
 .score--pop { animation: scorePop 0.25s ease-out; }
 
+/* Smaller scores for 3-panel cutthroat layout */
+.panels--triple .score { font-size: min(22vw, 160px); }
+.panels--triple .team-name { font-size: 13px; letter-spacing: 2px; }
+
 .tap-hint {
   margin-top: 16px;
   font-size: 12px;
@@ -128,8 +160,13 @@
 
 .controls {
   background: rgba(0,0,0,0.6);
-  padding: 14px 20px;
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  padding: 12px 20px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.controls-main {
   display: flex;
   gap: 8px;
   justify-content: center;
@@ -153,11 +190,42 @@
 }
 .btn:active { transform: scale(0.95); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn--end-turn {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.35);
+  color: #fff;
+}
 
 .label {
   font-size: 12px;
   color: rgba(255,255,255,0.25);
   padding: 0 8px;
+}
+
+/* Mode toggle bar */
+.mode-bar {
+  display: flex;
+  gap: 6px;
+}
+.mode-btn {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  color: rgba(255,255,255,0.4);
+  padding: 8px 4px;
+  font-size: 13px;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  text-align: center;
+}
+.mode-btn:active { transform: scale(0.95); }
+.mode-btn--active {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.32);
+  color: #fff;
 }
 
 /* Color picker overlay */
@@ -263,8 +331,6 @@
 <div class="app" id="app"></div>
 
 <script>
-  const WINNING_SCORE = 21;
-
   const COLOR_OPTIONS = [
     { name: 'Yellow',  color: '#c89200', accent: '#f5bf00' },
     { name: 'Blue',    color: '#1a4b8c', accent: '#3b7ddd' },
@@ -276,7 +342,9 @@
     { name: 'Pink',    color: '#b5357a', accent: '#e64ca1' },
   ];
 
+  // gameMode: 'og' | 'cutthroat' | 'holes'
   const state = {
+    gameMode: 'og',
     teams: [
       { name: 'Team 1', score: 0, colorIndex: 1 },
       { name: 'Team 2', score: 0, colorIndex: 0 },
@@ -286,28 +354,45 @@
     editingName: null,
     flashing: null,
     popTeam: null,
-    colorPicker: null,  // null or team index
+    colorPicker: null,
+    holesTurn: 0,      // holes mode: which player is currently throwing (0 or 1)
+    suddenDeath: false, // holes mode: whether we're in sudden death
   };
 
   function getColor(teamIndex) {
     return COLOR_OPTIONS[state.teams[teamIndex].colorIndex];
   }
 
+  function getWinningScore() {
+    return state.gameMode === 'holes' ? 10 : 21;
+  }
+
   function render() {
     const app = document.getElementById('app');
     const t = state.teams;
     const w = state.winner;
+    const isHoles = state.gameMode === 'holes';
+    const isCutthroat = state.gameMode === 'cutthroat';
 
-    let html = `<div class="panels">`;
+    const tripleClass = isCutthroat ? ' panels--triple' : '';
+    let html = `<div class="panels${tripleClass}">`;
 
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < t.length; i++) {
       const c = getColor(i);
-      const divider = i === 0 ? 'border-right: 3px solid rgba(0,0,0,0.4);' : '';
+      const divider = i < t.length - 1 ? 'border-right:3px solid rgba(0,0,0,0.4);' : '';
+      const isActiveThrower = isHoles && state.holesTurn === i;
+      const isInactive = isHoles && state.holesTurn !== i;
+      const activeClass = isActiveThrower ? ' panel--active-turn' : '';
+      const inactiveClass = isInactive ? ' panel--inactive' : '';
 
-      html += `<div class="panel" style="background:linear-gradient(170deg,${c.color}ee,${c.color}bb);${divider}" onclick="addPoint(${i})">`;
+      html += `<div class="panel${activeClass}${inactiveClass}" style="background:linear-gradient(170deg,${c.color}ee,${c.color}bb);${divider}" onclick="addPoint(${i})">`;
 
       if (state.flashing === i) {
         html += `<div class="panel__flash"></div>`;
+      }
+
+      if (state.suddenDeath && w === null) {
+        html += `<div class="sudden-death-badge">SUDDEN DEATH</div>`;
       }
 
       if (state.editingName === i) {
@@ -326,7 +411,13 @@
       html += `<div class="score${popClass}">${t[i].score}</div>`;
 
       if (w === null) {
-        html += `<div class="tap-hint">TAP TO SCORE</div>`;
+        let hint = '';
+        if (isHoles) {
+          hint = isActiveThrower ? 'TAP FOR EACH HOLE' : '';
+        } else {
+          hint = 'TAP TO SCORE';
+        }
+        if (hint) html += `<div class="tap-hint">${hint}</div>`;
       }
 
       html += `</div>`;
@@ -335,21 +426,37 @@
     html += `</div>`;
 
     // Controls
+    const winScore = getWinningScore();
+    const modeLabel = state.gameMode === 'holes' ? `First to ${winScore} holes` : `First to ${winScore}`;
+
+    const endTurnBtn = (isHoles && w === null) ? `
+      <button class="btn btn--end-turn" onclick="endTurn()">
+        End Turn
+      </button>` : '';
+
     html += `<div class="controls">
-      <button class="btn" onclick="undo()" ${state.history.length === 0 ? 'disabled' : ''}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 10h10a5 5 0 0 1 0 10H9"/>
-          <polyline points="7 14 3 10 7 6"/>
-        </svg>
-        Undo
-      </button>
-      <div class="label">First to ${WINNING_SCORE}</div>
-      <button class="btn" onclick="resetGame()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
-        </svg>
-        New Game
-      </button>
+      <div class="controls-main">
+        <button class="btn" onclick="undo()" ${state.history.length === 0 ? 'disabled' : ''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 10h10a5 5 0 0 1 0 10H9"/>
+            <polyline points="7 14 3 10 7 6"/>
+          </svg>
+          Undo
+        </button>
+        ${endTurnBtn}
+        <div class="label">${modeLabel}</div>
+        <button class="btn" onclick="resetGame()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+          </svg>
+          New Game
+        </button>
+      </div>
+      <div class="mode-bar">
+        <button class="mode-btn${state.gameMode === 'og' ? ' mode-btn--active' : ''}" onclick="switchMode('og')">OG</button>
+        <button class="mode-btn${state.gameMode === 'cutthroat' ? ' mode-btn--active' : ''}" onclick="switchMode('cutthroat')">Cutthroat</button>
+        <button class="mode-btn${state.gameMode === 'holes' ? ' mode-btn--active' : ''}" onclick="switchMode('holes')">Holes</button>
+      </div>
     </div>`;
 
     // Color picker
@@ -402,22 +509,47 @@
 
   function addPoint(teamIndex) {
     if (state.winner !== null || state.colorPicker !== null) return;
+    // Holes mode: only the current thrower can score
+    if (state.gameMode === 'holes' && teamIndex !== state.holesTurn) return;
+
     state.teams[teamIndex].score++;
     state.history.push({ teamIndex, prevScore: state.teams[teamIndex].score - 1 });
     state.flashing = teamIndex;
     state.popTeam = teamIndex;
 
-    if (state.teams[teamIndex].score >= WINNING_SCORE) {
-      state.winner = teamIndex;
+    // OG and Cutthroat: check for win after every point
+    if (state.gameMode !== 'holes') {
+      if (state.teams[teamIndex].score >= getWinningScore()) {
+        state.winner = teamIndex;
+      }
     }
 
     render();
-
     setTimeout(() => {
       state.flashing = null;
       state.popTeam = null;
       render();
     }, 250);
+  }
+
+  // Holes mode: called when the current thrower finishes their 8 bags
+  function endTurn() {
+    if (state.winner !== null) return;
+    const next = 1 - state.holesTurn;
+    state.holesTurn = next;
+
+    // After both players have thrown (full round complete), check win condition
+    if (next === 0) {
+      const s0 = state.teams[0].score;
+      const s1 = state.teams[1].score;
+      if (Math.max(s0, s1) >= 10) {
+        if (s0 > s1)      state.winner = 0;
+        else if (s1 > s0) state.winner = 1;
+        else              state.suddenDeath = true; // tied — keep playing
+      }
+    }
+
+    render();
   }
 
   function undo() {
@@ -429,11 +561,36 @@
   }
 
   function resetGame() {
-    state.teams[0].score = 0;
-    state.teams[1].score = 0;
+    const prev = state.teams;
+    const mode = state.gameMode;
+
     state.history = [];
     state.winner = null;
+    state.colorPicker = null;
+    state.holesTurn = 0;
+    state.suddenDeath = false;
+
+    if (mode === 'cutthroat') {
+      state.teams = [
+        { name: prev[0]?.name || 'Player 1', score: 0, colorIndex: prev[0]?.colorIndex ?? 1 },
+        { name: prev[1]?.name || 'Player 2', score: 0, colorIndex: prev[1]?.colorIndex ?? 0 },
+        { name: prev[2]?.name || 'Player 3', score: 0, colorIndex: prev[2]?.colorIndex ?? 4 },
+      ];
+    } else {
+      state.teams = [
+        { name: prev[0]?.name || 'Team 1', score: 0, colorIndex: prev[0]?.colorIndex ?? 1 },
+        { name: prev[1]?.name || 'Team 2', score: 0, colorIndex: prev[1]?.colorIndex ?? 0 },
+      ];
+    }
+
     render();
+  }
+
+  function switchMode(mode) {
+    if (state.gameMode === mode) return;
+    state.gameMode = mode;
+    state.teams = []; // clear so resetGame initializes fresh defaults
+    resetGame();
   }
 
   function editName(index) {
