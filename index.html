@@ -161,17 +161,13 @@
 
 .controls {
   background: rgba(0,0,0,0.6);
-  padding: 12px 20px;
+  padding: 12px 16px;
   padding-bottom: max(12px, env(safe-area-inset-bottom));
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.controls-main {
   display: flex;
   gap: 8px;
   justify-content: center;
   align-items: center;
+  position: relative;
 }
 
 .btn {
@@ -188,6 +184,7 @@
   align-items: center;
   gap: 6px;
   outline: none;
+  touch-action: manipulation;
 }
 .btn:active { transform: scale(0.95); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -203,31 +200,41 @@
   padding: 0 8px;
 }
 
-/* Mode toggle bar */
-.mode-bar {
-  display: flex;
-  gap: 6px;
+/* Mode dropup */
+.mode-dropup-wrap { position: relative; }
+.mode-dropup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e1e;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  overflow: hidden;
+  min-width: 140px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.6);
+  animation: slideUp 0.18s ease;
+  z-index: 50;
 }
-.mode-btn {
-  flex: 1;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
-  color: rgba(255,255,255,0.4);
-  padding: 8px 4px;
-  font-size: 13px;
+.mode-option {
+  display: block;
+  width: 100%;
+  padding: 12px 20px;
+  text-align: left;
   font-family: 'Fredoka', sans-serif;
   font-weight: 600;
+  font-size: 15px;
+  color: rgba(255,255,255,0.5);
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   cursor: pointer;
   outline: none;
-  text-align: center;
+  touch-action: manipulation;
 }
-.mode-btn:active { transform: scale(0.95); }
-.mode-btn--active {
-  background: rgba(255,255,255,0.16);
-  border-color: rgba(255,255,255,0.32);
-  color: #fff;
-}
+.mode-option:last-child { border-bottom: none; }
+.mode-option:active { background: rgba(255,255,255,0.08); }
+.mode-option--active { color: #fff; }
 
 /* Color picker overlay */
 .color-overlay {
@@ -356,6 +363,7 @@
     flashing: null,
     popTeam: null,
     colorPicker: null,
+    modePicker: false,
     holesTurn: 0,      // holes mode: which player is currently throwing (0 or 1)
     suddenDeath: false, // holes mode: whether we're in sudden death
   };
@@ -429,35 +437,43 @@
     // Controls
     const winScore = getWinningScore();
     const modeLabel = state.gameMode === 'holes' ? `First to ${winScore} holes` : `First to ${winScore}`;
+    const modeNames = { og: 'OG', cutthroat: 'Cutthroat', holes: 'Holes' };
 
     const endTurnBtn = (isHoles && w === null) ? `
-      <button class="btn btn--end-turn" onclick="endTurn()">
-        End Turn
-      </button>` : '';
+      <button class="btn btn--end-turn" onclick="endTurn()">End Turn</button>` : '';
+
+    const dropup = state.modePicker ? `
+      <div class="mode-dropup">
+        <button class="mode-option${state.gameMode==='og'?' mode-option--active':''}" onclick="switchMode('og')">OG</button>
+        <button class="mode-option${state.gameMode==='cutthroat'?' mode-option--active':''}" onclick="switchMode('cutthroat')">Cutthroat</button>
+        <button class="mode-option${state.gameMode==='holes'?' mode-option--active':''}" onclick="switchMode('holes')">Holes</button>
+      </div>` : '';
 
     html += `<div class="controls">
-      <div class="controls-main">
-        <button class="btn" onclick="undo()" ${state.history.length === 0 ? 'disabled' : ''}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 10h10a5 5 0 0 1 0 10H9"/>
-            <polyline points="7 14 3 10 7 6"/>
+      <button class="btn" onclick="undo()" ${state.history.length === 0 ? 'disabled' : ''}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 10h10a5 5 0 0 1 0 10H9"/>
+          <polyline points="7 14 3 10 7 6"/>
+        </svg>
+        Undo
+      </button>
+      ${endTurnBtn}
+      <div class="mode-dropup-wrap">
+        <button class="btn${state.modePicker?' btn--end-turn':''}" onclick="toggleModePicker()">
+          ${modeNames[state.gameMode]}
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="${state.modePicker ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"/>
           </svg>
-          Undo
         </button>
-        ${endTurnBtn}
-        <div class="label">${modeLabel}</div>
-        <button class="btn" onclick="resetGame()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
-          </svg>
-          New Game
-        </button>
+        ${dropup}
       </div>
-      <div class="mode-bar">
-        <button class="mode-btn${state.gameMode === 'og' ? ' mode-btn--active' : ''}" onclick="switchMode('og')">OG</button>
-        <button class="mode-btn${state.gameMode === 'cutthroat' ? ' mode-btn--active' : ''}" onclick="switchMode('cutthroat')">Cutthroat</button>
-        <button class="mode-btn${state.gameMode === 'holes' ? ' mode-btn--active' : ''}" onclick="switchMode('holes')">Holes</button>
-      </div>
+      <div class="label">${modeLabel}</div>
+      <button class="btn" onclick="resetGame()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+        </svg>
+        New Game
+      </button>
     </div>`;
 
     // Color picker
@@ -508,8 +524,14 @@
     app.innerHTML = html;
   }
 
+  function toggleModePicker() {
+    state.modePicker = !state.modePicker;
+    render();
+  }
+
   function addPoint(teamIndex) {
     if (state.winner !== null || state.colorPicker !== null) return;
+    if (state.modePicker) { state.modePicker = false; render(); return; }
     // Holes mode: only the current thrower can score
     if (state.gameMode === 'holes' && teamIndex !== state.holesTurn) return;
 
@@ -568,6 +590,7 @@
     state.history = [];
     state.winner = null;
     state.colorPicker = null;
+    state.modePicker = false;
     state.holesTurn = 0;
     state.suddenDeath = false;
 
@@ -588,7 +611,7 @@
   }
 
   function switchMode(mode) {
-    if (state.gameMode === mode) return;
+    if (state.gameMode === mode) { state.modePicker = false; render(); return; }
     state.gameMode = mode;
     state.teams = []; // clear so resetGame initializes fresh defaults
     resetGame();
